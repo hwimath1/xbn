@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>연립이차부등식</title>
+  <!-- MathJax for LaTeX rendering -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+    defer
+  ></script>
+  <style>
+    /* 흑백 테마 */
+    body {
+      background-color: white;
+      color: black;
+      font-family: sans-serif;
+      margin: 30px;
+    }
+    h1, h2, h3 {
+      text-align: center;
+    }
+    .centered {
+      text-align: center;
+    }
+    .hidden {
+      display: none;
+    }
+    .energy-bar {
+      height: 20px;
+      background-color: black;
+      transition: width 0.2s;
+    }
+    .question-box {
+      border: 1px solid black;
+      padding: 15px;
+      margin: 15px 0;
+    }
+    .answer-choice {
+      margin: 8px 0;
+    }
+    .answer-choice input {
+      margin-right: 8px;
+    }
+    .notice {
+      font-weight: bold;
+      color: black;
+      margin: 10px 0;
+    }
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+    #response {
+      margin-top: 10px;
+      white-space: pre-wrap;
+    }
+    button {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>연립이차부등식</h1>
+
+<div id="main-menu">
+  <div class="centered">
+    <h2>이름을 입력하세요</h2>
+    <input type="text" id="playerName" placeholder="이름" style="text-align:center;" />
+  </div>
+  <div class="centered" style="margin-top:20px;">
+    <h2>난이도를 선택하세요</h2>
+    <label><input type="radio" name="difficulty" value="hardest" /> 최상 (20초 / 문제, 20점)</label><br/>
+    <label><input type="radio" name="difficulty" value="hard" /> 상 (30초 / 문제, 15점)</label><br/>
+    <label><input type="radio" name="difficulty" value="medium" /> 중 (40초 / 문제, 13점)</label><br/>
+    <label><input type="radio" name="difficulty" value="easy" /> 하 (시간제한 없음, 10점)</label>
+  </div>
+  <div class="centered" style="margin-top:20px;">
+    <button onclick="startGame()">게임 시작</button>
+  </div>
+</div>
+
+<div id="quiz-container" class="hidden">
+  <div class="centered">
+    <h2 id="timerDisplay"></h2>
+    <div style="width: 100%; border: 1px solid black;">
+      <div id="energyBar" class="energy-bar" style="width:100%;"></div>
+    </div>
+  </div>
+  <div class="centered">
+    <p>남은 기회: <span id="lives">3</span></p>
+    <p>현재 점수: <span id="currentScore">0</span></p>
+    <p>경과 시간: <span id="totalTime">0</span>초</p>
+  </div>
+  <div id="questionArea" class="question-box"></div>
+</div>
+
+<div id="end-screen" class="hidden centered">
+  <h2 id="endMessage"></h2>
+  <p>최종 점수: <span id="finalScore">0</span></p>
+  <p>총 소요 시간: <span id="finalTime">0</span>초</p>
+  <button onclick="submitScore()">점수 전송</button>
+  <div id="response"></div>
+</div>
+
+<script>
+  /*
+    [게임 안내]
+    - 문제들은 모두 원문 그대로, 정답만 correct 속성으로 관리.
+    - 난이도별 시간/점수:
+        최상(hardest): 20초, 문제당 20점
+        상(hard): 30초, 문제당 15점
+        중(medium): 40초, 문제당 13점
+        하(easy): 시간제한 없음, 문제당 10점
+    - 3번 틀리면 종료.
+    - 문제마다 에너지바(시간) 소진: 다 되면 자동 오답 처리 후 기회-1.
+      (정답/오답 확인 후 “다음문제” 버튼을 눌러야 다음 문제로 넘어갑니다.)
+    - 모든 문제(중복 없이) 무작위 출제.
+    - 마지막에 "점수 전송" 버튼.
+  */
+
+  const questionsData = [
+    {
+      question: "\\(\\begin{cases} x^2 - x - 2 > 0,\\\\ x^2 - 5x + 4 \\le 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−1 ≤ x < 4",
+        "2 < x < 4",
+        "x < −1 또는 x > 2",
+        "2 < x ≤ 4"
+      ],
+      correct: 4
+    },
+    {
+      question: "\\(\\begin{cases} 4x + 10 \\ge 6,\\\\ 2x^2 - 5x - 3 \\le 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−0.5 ≤ x < 3",
+        "−5 ≤ x < −0.5",
+        "−0.5 ≤ x ≤ 3",
+        "0 < x ≤ 4"
+      ],
+      correct: 3
+    },
+    {
+      question: "\\(\\begin{cases} 3x + 5 < x - 1,\\\\ x^2 + 6x - 7 < 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−7 < x ≤ −3",
+        "−7 < x < −3",
+        "−7 ≤ x < −3",
+        "−7 < x < −1"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} 3x + 4 \\ge x + 2,\\\\ x^2 - 6x + 5 < 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "x ≤ −1 또는 1 < x < 5",
+        "−3 < x < 1",
+        "1 < x < 5",
+        "x > 1"
+      ],
+      correct: 3
+    },
+    {
+      question: "\\(\\begin{cases} 3x + 4 < x + 5,\\\\ x^2 - x - 2 \\ge 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "x ≤ −2",
+        "x ≤ −1",
+        "x ≤ 0",
+        "x ≤ −1 또는 x ≥ 2"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} 2x + 5 > x + 2,\\\\ x^2 + 4x - 5 < 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−3 < x < 1",
+        "−5 < x < 1",
+        "−3 < x < 2",
+        "−3 ≤ x < 0"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(\\begin{cases} 2x + 3 > 6x - 1,\\\\ 6 - x \\ge x^2 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−3 ≤ x < 1",
+        "−3 < x ≤ 1",
+        "1 < x < 3",
+        "−3 ≤ x ≤ 2"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(\\begin{cases} x^2 - 3x + 2 \\ge 0,\\\\ x^2 - x - 6 < 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−2 ≤ x ≤ 3",
+        "x ≤ 1 또는 x ≥ 2",
+        "−2 < x ≤ 1 또는 2 ≤ x < 3",
+        "1 < x < 2"
+      ],
+      correct: 3
+    },
+    {
+      question: "\\(\\begin{cases} −3x − 2 \\le x^2,\\\\ x^2 \\le −2x + 3 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−3 ≤ x ≤ 2 또는 −1 ≤ x ≤ 3",
+        "−3 ≤ x ≤ −2 또는 −1 ≤ x ≤ 1",
+        "−3 < x < −2 또는 −1 < x ≤ 1",
+        "−3 ≤ x < −1 또는 −2 ≤ x ≤ 1"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} x^2 + 2x - 15 \\le 0,\\\\ x^2 - 7x + 10 > 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "2 < x ≤ 3",
+        "x ≤ −5 또는 x ≥ 2",
+        "−5 ≤ x < 2",
+        "−3 ≤ x < 2 또는 x ≥ 5"
+      ],
+      correct: 3
+    },
+    {
+      question: "\\(\\begin{cases} x^2 - 7x + 10 \\le 0,\\\\ x^2 - 2x - 3 > 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "2 < x < 3 또는 3 < x ≤ 5",
+        "3 < x ≤ 5",
+        "−1 < x < 2",
+        "x < −1 또는 x > 5"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} 3x^2 - 8x - 16 < 0,\\\\ -2x^2 + 7x - 6 \\le 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "\\(-\\frac{4}{3} < x \\le \\frac{3}{2}\\) 또는 \\(2 \\le x < 4\\)",
+        "−2 ≤ x < 2 또는 −1 ≤ x < \\(\\frac{3}{2}\\)",
+        "x < −\\(\\frac{4}{3}\\) 또는 x ≥ \\(\\frac{3}{2}\\)",
+        "\\(-\\frac{4}{3} < x < \\frac{3}{2}\\) 또는 \\(2 < x < 4\\)"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(\\begin{cases} 2x^2 - 9x + 10 > 0,\\\\ 3x^2 - 10x + 3 < 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−1 < x ≤ 2 또는 3 < x < 5",
+        "\\(\\frac{1}{3} < x < 2\\) 또는 \\(\\frac{5}{2} < x < 3\\)",
+        "\\(\\frac{5}{2} < x < 3\\)",
+        "−2 < x ≤ \\(\\frac{1}{3}\\) 또는 x > 3"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} 3x - 6 > 0,\\\\ x^2 - 6x + 5 \\le 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "2 < x < 4",
+        "2 < x ≤ 5",
+        "1 < x ≤ 5",
+        "2 ≤ x < 4"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} x^2 + x - 6 \\le 0,\\\\ x^2 - x \\ge 0 \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−2 ≤ x ≤ 2 또는 −3 ≤ x ≤ 5",
+        "0 < x < 2",
+        "−3 < x ≤ 2 또는 x ≥ 1",
+        "−3 ≤ x ≤ 0 또는 1 ≤ x ≤ 2"
+      ],
+      correct: 4
+    },
+    {
+      question: "\\(2x + 3 < x^2 \\le 9x - 20\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "4 ≤ x ≤ 5",
+        "3 ≤ x < 4 또는 x > 5",
+        "x = 4 또는 x = 5",
+        "−3 ≤ x < 4"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(0 \\le x^2 - 3x + 2 \\le 2\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "1 ≤ x ≤ 2 또는 2 ≤ x ≤ 4",
+        "−1 ≤ x ≤ 1 또는 2 ≤ x ≤ 3",
+        "0 ≤ x ≤ 1 또는 2 ≤ x ≤ 3",
+        "0 < x ≤ 1 또는 2 < x < 3"
+      ],
+      correct: 3
+    },
+    {
+      question: "\\(−5 \\le x^2 + 5x - 1 \\le 5\\) 이 부등식을 만족하는 x를 구하시오.",
+      choices: [
+        "−6 ≤ x ≤ −1 또는 4 ≤ x ≤ 5",
+        "−5 ≤ x < −1 또는 −1 < x ≤ 5",
+        "−4 ≤ x ≤ 1 또는 −6 ≤ x ≤ 4",
+        "−6 ≤ x ≤ −4 또는 −1 ≤ x ≤ 1"
+      ],
+      correct: 4
+    },
+    {
+      question: "\\(5x - 1 < x^2 + 5 < 6x\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "1 < x < 4",
+        "1 < x < 2 또는 3 < x < 5",
+        "−1 < x < 2 또는 3 < x < 6",
+        "2 < x < 3 또는 1 < x < 5"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} 3x - 4 \\le 3x^2 + x - 5 < x^2 + 1\\end{cases}\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "−2 < x ≤ −1/3 또는 1 ≤ x < 3/2",
+        "−1/3 < x < 1",
+        "−2 < x < −1 또는 1 < x < 2",
+        "−2 < x ≤ 0 또는 1 < x < 3/2"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(−1 < x^2 - 3x + 1 < 19\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "−3 < x < 6",
+        "−3 < x < 1 또는 2 < x < 6",
+        "−3 < x < 2 또는 1 < x < 6",
+        "1 < x < 3 또는 −1 < x < 2"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(x - 1 \\le x^2 + 3x - 4 < 0\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "−3 ≤ x < 0",
+        "−4 < x ≤ −3",
+        "x ≤ −3 또는 x > 2",
+        "−4 ≤ x ≤ −3 또는 0 ≤ x < 1"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(3x^2 - 4x \\le x^2 < 1 - 3x^2\\) 이 부등식을 만족하는 x를 구하시오.",
+      choices: [
+        "−1 < x < \\(\\frac{1}{2}\\)",
+        "0 < x < \\(\\frac{1}{2}\\)",
+        "−1 ≤ x < 1",
+        "0 ≤ x < \\(\\frac{1}{2}\\)"
+      ],
+      correct: 4
+    },
+    {
+      question: "\\(3x + 4 < x^2\\) 이면서 \\(x^2 \\le 6x - 5\\) 이 부등식을 만족하는 x를 구하시오.",
+      choices: [
+        "x < −1 또는 4 < x < 5",
+        "4 < x ≤ 5",
+        "2 < x < 5",
+        "4 ≤ x ≤ 5"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} x^2 - 2x - 3 \\le 0,\\\\ x^2 - (k+2)x + 2k < 0 \\end{cases}\\) 이 연립부등식의 해가 (2 < x ≤ 3)가 되도록 하는 k의 범위를 구하시오.",
+      choices: [
+        "k > 3",
+        "k > −1",
+        "k > 2",
+        "k > 0"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(\\begin{cases} x^2 - (1+k)x + k < 0,\\\\ x^2 - x - 2 < 0 \\end{cases}\\) 이 연립부등식의 해가 (1 < x < 2)가 되도록 하는 k의 범위를 구하시오.",
+      choices: [
+        "k ≤ −1",
+        "k ≥ 2",
+        "k > 1",
+        "k < 2"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} x^2 - 3x - 4 > 0,\\\\ x^2 - (k+5)x + 5k \\le 0 \\end{cases}\\) 이 연립부등식의 해가 (4 < x ≤ 5)가 되도록 할 때, 실수 k의 범위를 구하시오.",
+      choices: [
+        "−1 ≤ k ≤ 4",
+        "k > 5",
+        "k < −4",
+        "−4 ≤ k < −1"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(\\begin{cases} x^2 - x - 2 > 0,\\\\ 2x^2 + (5+2a)x + 5a < 0 \\end{cases}\\) 이 연립부등식에서 정수해가 x = −2 하나만 되도록 하는 정수 a 중, 최댓값 M과 최솟값 m을 구했을 때 (M + m)을 구하시오.",
+      choices: [
+        "0",
+        "−4",
+        "2",
+        "−2"
+      ],
+      correct: 4
+    },
+    {
+      question: "\\(\\begin{cases} x^2 - 9x + 8 \\ge 0,\\\\ (x - a)(x - a^2) < 0 \\end{cases}\\) 이 연립부등식에 해가 존재하지 않도록 (a ≠ 0) 하는 정수 a의 개수를 구하시오.",
+      choices: [
+        "2",
+        "1",
+        "4",
+        "3"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(x^2 - |x| < 12\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "−3 < x < 3",
+        "−4 ≤ x < 4 또는 3 ≤ x < 4",
+        "−4 < x < 4",
+        "−4 < x ≤ 4"
+      ],
+      correct: 3
+    },
+    {
+      question: "\\(x^2 - |x| - 1 \\le 1 \\Longrightarrow x^2 - |x| \\le 2\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "−2 ≤ x ≤ 2",
+        "−2 < x < 2",
+        "−2 ≤ x < 2",
+        "−2 < x ≤ 1"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(x^2 - 8 \\le 2|x|\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "0 < x ≤ 4",
+        "−4 ≤ x ≤ 4",
+        "−4 < x < 4",
+        "−4 < x ≤ 3 또는 3 ≤ x ≤ 4"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(x^2 - 2|x| - 3 < 0\\) 이 부등식을 만족하는 x의 해를 구하시오.",
+      choices: [
+        "−3 < x < 3",
+        "−3 ≤ x < 3",
+        "−3 < x < 0 또는 0 < x < 3",
+        "−3 < x < 2 또는 2 < x < 3"
+      ],
+      correct: 1
+    },
+    {
+      question: "\\(\\begin{cases} |x + 1| < 4,\\\\ x^2 + 2x > −3x \\end{cases}\\) 연립부등식의 해를 구하시오.",
+      choices: [
+        "−4 ≤ x ≤ 0 또는 x ≥ 3",
+        "0 < x < 3",
+        "−5 < x < 0 또는 3 < x < 4",
+        "0 < x < 3"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} |x - 1| \\le 3,\\\\ −x^2 + 4x + 5 > 0 \\end{cases}\\) 이 연립부등식의 해를 구하시오.",
+      choices: [
+        "1 < x < 5",
+        "x ≥ 0 이고 x ≤ 4",
+        "−1 < x ≤ 4",
+        "−1 ≤ x < 4"
+      ],
+      correct: 3
+    },
+    {
+      question: "\\(\\begin{cases} |x - 2| > 6,\\\\ x^2 - 4x - 45 \\le 0 \\end{cases}\\) 이 연립부등식의 해를 구하시오.",
+      choices: [
+        "−5 < x ≤ −4 또는 8 < x < 9",
+        "−6 < x ≤ −4 또는 8 < x < 9",
+        "−5 ≤ x < −4 또는 8 < x ≤ 9",
+        "−5 ≤ x < −4 또는 8 < x ≤ 9"
+      ],
+      correct: 4
+    },
+    {
+      question: "\\(\\begin{cases} |2x + 1| < 7,\\\\ x^2 - 2x - 8 \\le 0 \\end{cases}\\) 이 연립부등식의 해가 (−2 ≤ x < 3)이 되도록 할 때, 옳은 것을 고르시오.",
+      choices: [
+        "−2 < x < 4",
+        "−2 ≤ x < 3",
+        "−4 < x < 3",
+        "−2 ≤ x < 3"
+      ],
+      correct: 2
+    },
+    {
+      question: "\\(\\begin{cases} |x - 4| \\le 2,\\\\ x^2 + 15x \\ge 8x \\end{cases}\\) 이 연립부등식의 해를 구하시오.",
+      choices: [
+        "4 < x < 6",
+        "2 < x < 6",
+        "2 ≤ x ≤ 6",
+        "4 ≤ x < 6"
+      ],
+      correct: 3
+    },
+    {
+      question: "세 변 x, x+2, x+4인 삼각형이 둔각삼각형이 되도록 하는 정수 x의 개수를 구하시오.",
+      choices: [
+        "2",
+        "4",
+        "3",
+        "5"
+      ],
+      correct: 3
+    },
+    {
+      question: "세 변 (2x−1), x, (2x+1)인 삼각형이 둔각삼각형이 되도록 하는 정수 x의 개수를 구하시오.",
+      choices: [
+        "6",
+        "3",
+        "4",
+        "5"
+      ],
+      correct: 4
+    },
+    {
+      question: "둘레 48cm인 직사각형에서 넓이가 140㎠ 이상이 되도록 가로(l)와 세로(w)를 정할 때 (l ≥ w). 가로 l의 최대:최소값을 구하시오.",
+      choices: [
+        "최대 14, 최소 12",
+        "최대 12, 최소 10",
+        "최대 14, 최소 10",
+        "최대 15, 최소 13"
+      ],
+      correct: 1
+    },
+    {
+      question: "둘레 20cm인 직사각형에서 넓이가 24㎠ 이상이 되도록 가로(l)와 세로(w)를 정할 때 (l ≥ w). 가로 l의 최대:최소값을 구하시오.",
+      choices: [
+        "최대 10, 최소 2",
+        "최대 6, 최소 5",
+        "최대 5, 최소 4",
+        "최대 7, 최소 3"
+      ],
+      correct: 2
+    }
+  ];
+
+  // 전역 변수
+  let lives = 3;
+  let score = 0;
+  let totalElapsedSeconds = 0;  
+  let currentIndex = 0;         
+  let timer = null;            
+  let timeLimit = 0;           
+  let startTimeStamp = 0;      
+  let questionStartTime = 0;   
+  let gameInProgress = false;  
+  let pointsPerQuestion = 0;  
+  let shuffled = [];
+  let answerSubmitted = false; // 현재 문제에 대해 답 제출 여부
+
+  // 셔플 함수
+  function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      let j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  }
+
+  function startGame() {
+    const nameInput = document.getElementById("playerName").value.trim();
+    if (!nameInput) {
+      alert("이름을 입력해주세요.");
+      return;
+    }
+
+    const diffEls = document.getElementsByName("difficulty");
+    let difficultySelected = null;
+    for (let el of diffEls) {
+      if (el.checked) {
+        difficultySelected = el.value;
+        break;
+      }
+    }
+    if (!difficultySelected) {
+      alert("난이도를 선택해주세요.");
+      return;
+    }
+
+    if (difficultySelected === "hardest") {
+      timeLimit = 20;
+      pointsPerQuestion = 20;
+    } else if (difficultySelected === "hard") {
+      timeLimit = 30;
+      pointsPerQuestion = 15;
+    } else if (difficultySelected === "medium") {
+      timeLimit = 40;
+      pointsPerQuestion = 13;
+    } else {
+      timeLimit = 0; 
+      pointsPerQuestion = 10;
+    }
+
+    lives = 3;
+    score = 0;
+    totalElapsedSeconds = 0;
+    currentIndex = 0;
+    gameInProgress = true;
+
+    shuffled = [...questionsData];
+    shuffleArray(shuffled);
+
+    document.getElementById("main-menu").classList.add("hidden");
+    document.getElementById("quiz-container").classList.remove("hidden");
+    document.getElementById("end-screen").classList.add("hidden");
+
+    document.getElementById("lives").innerText = lives;
+    document.getElementById("currentScore").innerText = score;
+    document.getElementById("totalTime").innerText = 0;
+
+    startTimeStamp = Date.now();
+    loadQuestion();
+    timer = setInterval(updateTime, 250);
+  }
+
+  function loadQuestion() {
+    if (currentIndex >= shuffled.length) {
+      endGame(false);
+      return;
+    }
+    answerSubmitted = false;
+    questionStartTime = Date.now();
+    const q = shuffled[currentIndex];
+
+    const questionArea = document.getElementById("questionArea");
+    // "정답제출" 버튼과 "다음문제" 버튼을 함께 포함 (초기엔 다음문제 버튼은 숨김)
+    questionArea.innerHTML = `
+      <div>
+        <p>${q.question}</p>
+        <div id="choiceContainer"></div>
+      </div>
+      <div class="notice"></div>
+      <button id="submitBtn" onclick="submitAnswer()">정답제출</button>
+      <button id="nextBtn" class="hidden" onclick="nextQuestion()">다음문제</button>
+    `;
+
+    const choiceCont = questionArea.querySelector("#choiceContainer");
+    q.choices.forEach((ch, idx) => {
+      const row = document.createElement("div");
+      row.className = "answer-choice";
+      row.innerHTML = `
+        <label>
+          <input type="radio" name="ans" value="${idx+1}"/>
+          <span>${ch}</span>
+        </label>
+      `;
+      choiceCont.appendChild(row);
+    });
+
+    // 수식 렌더링
+    MathJax.typeset();
+
+    // 에너지바 초기화
+    updateEnergyBar(100);
+  }
+
+  function submitAnswer() {
+    if (!gameInProgress || answerSubmitted) return;
+
+    const ansEls = document.getElementsByName("ans");
+    let chosen = 0;
+    for (let el of ansEls) {
+      if (el.checked) {
+        chosen = parseInt(el.value);
+        break;
+      }
+    }
+    if (chosen === 0) {
+      alert("보기를 선택하세요!");
+      return;
+    }
+    answerSubmitted = true;
+    // 정답제출 버튼 비활성화
+    document.getElementById("submitBtn").disabled = true;
+
+    const correctChoice = shuffled[currentIndex].correct;
+
+    const noticeEl = document.querySelector(".notice");
+    if (chosen === correctChoice) {
+      score += pointsPerQuestion;
+      document.getElementById("currentScore").innerText = score;
+      noticeEl.innerHTML = `<span style="color:green;">정답입니다!</span>`;
+    } else {
+      lives--;
+      document.getElementById("lives").innerText = lives;
+      noticeEl.innerHTML = `<span class="error">틀렸습니다! 정답은 ${correctChoice}번입니다.</span>`;
+    }
+
+    if (lives <= 0) {
+      setTimeout(endGame.bind(null, true), 1000);
+      return;
+    }
+    // 답 확인 후 "다음문제" 버튼 활성화 (버튼은 답 제출 또는 시간 초과 후에만 작동)
+    document.getElementById("nextBtn").classList.remove("hidden");
+  }
+
+  function nextQuestion() {
+    currentIndex++;
+    loadQuestion();
+  }
+
+  function updateEnergyBar(percentage) {
+    const bar = document.getElementById("energyBar");
+    bar.style.width = percentage + "%";
+  }
+
+  function updateTime() {
+    if (!gameInProgress || answerSubmitted) return;
+    const now = Date.now();
+    totalElapsedSeconds = Math.floor((now - startTimeStamp) / 1000);
+    document.getElementById("totalTime").innerText = totalElapsedSeconds;
+
+    if (timeLimit > 0) {
+      const used = (now - questionStartTime) / 1000;
+      const remain = timeLimit - used;
+      let ratio = remain / timeLimit;
+      if (ratio < 0) ratio = 0;
+      updateEnergyBar(Math.floor(ratio * 100));
+
+      if (remain <= 0) {
+        answerSubmitted = true;
+        lives--;
+        document.getElementById("lives").innerText = lives;
+        const noticeEl = document.querySelector(".notice");
+        noticeEl.innerHTML = `<span class="error">시간 초과! 오답 처리됩니다. 정답은 ${shuffled[currentIndex].correct}번입니다.</span>`;
+        document.getElementById("submitBtn").disabled = true;
+        document.getElementById("nextBtn").classList.remove("hidden");
+        if (lives <= 0) {
+          setTimeout(endGame.bind(null, true), 1000);
+        }
+      }
+      document.getElementById("timerDisplay").innerText = "";
+    } else {
+      updateEnergyBar(100);
+      document.getElementById("timerDisplay").innerText = "";
+    }
+  }
+
+  function endGame(byMistake) {
+    gameInProgress = false;
+    clearInterval(timer);
+
+    document.getElementById("quiz-container").classList.add("hidden");
+    document.getElementById("end-screen").classList.remove("hidden");
+
+    const endMsgEl = document.getElementById("endMessage");
+    if (byMistake) {
+      endMsgEl.innerText = "3번 틀렸습니다. 게임 종료!";
+    } else {
+      endMsgEl.innerText = "문제를 모두 풀었습니다!";
+    }
+
+    document.getElementById("finalScore").innerText = score;
+    document.getElementById("finalTime").innerText = totalElapsedSeconds;
+  }
+
+  function submitScore() {
+    const nameInput = document.getElementById("playerName").value.trim();
+    saveData("연립이차부등식", nameInput, score, totalElapsedSeconds);
+  }
+
+  // 서버 전송 함수
+  function saveData(game, name, score, elapsedTime) {
+    const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+    const requestData = {
+      game,
+      name,
+      score: parseInt(score, 10),
+      elapsedTime: parseInt(elapsedTime, 10)
+    };
+    fetch(FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    })
+    .then(response => response.json().then(data => ({ ok: response.ok, data })))
+    .then(({ ok, data }) => {
+      if (ok) {
+        document.getElementById('response').innerText =
+          `성공: ${JSON.stringify(data, null, 2)}`;
+      } else {
+        document.getElementById('response').innerText =
+          `오류: ${JSON.stringify(data, null, 2)}`;
+      }
+    })
+    .catch(error => {
+      console.error('요청 실패:', error);
+      document.getElementById('response').innerText =
+        `네트워크 오류: ${error.message}`;
+    });
+  }
+</script>
+
+</body>
+</html>
